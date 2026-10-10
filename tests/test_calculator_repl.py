@@ -1,0 +1,333 @@
+import pandas as pd
+import pytest
+
+from app.calculator_repl import CalculatorREPL, HELP_TEXT
+from app.exceptions import OperationError
+
+
+class StubCalculator:
+    """Simple calculator stub used for REPL tests."""
+
+    def __init__(self):
+        self.history = pd.DataFrame(
+            columns=["operation", "a", "b", "result"]
+        )
+        self.undo_result = False
+        self.redo_result = False
+        self.saved = False
+        self.loaded = False
+        self.cleared = False
+
+    def calculate(self, operation, a, b):
+        if operation == "divide" and b == 0:
+            raise OperationError(
+                "Division by zero is not allowed."
+            )
+
+        results = {
+            "add": a + b,
+            "subtract": a - b,
+            "multiply": a * b,
+            "divide": a / b,
+            "power": a ** b,
+            "root": a ** (1 / b),
+        }
+
+        result = results[operation]
+
+        new_row = pd.DataFrame(
+            [
+                {
+                    "operation": operation,
+                    "a": a,
+                    "b": b,
+                    "result": result,
+                }
+            ]
+        )
+
+        self.history = pd.concat(
+            [self.history, new_row],
+            ignore_index=True,
+        )
+
+        return result
+
+    def get_history(self):
+        return self.history.copy()
+
+    def clear_history(self):
+        self.history = self.history.iloc[0:0]
+        self.cleared = True
+
+    def undo(self):
+        return self.undo_result
+
+    def redo(self):
+        return self.redo_result
+
+    def save_history(self):
+        self.saved = True
+
+    def load_history(self):
+        self.loaded = True
+
+
+def test_repl_uses_provided_calculator():
+    calculator = StubCalculator()
+    repl = CalculatorREPL(calculator)
+
+    assert repl.calculator is calculator
+
+
+def test_show_help(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    repl.show_help()
+
+    output = capsys.readouterr().out
+
+    assert "Available operations:" in output
+    assert "Available commands:" in output
+    assert HELP_TEXT.strip() in output
+
+
+def test_show_empty_history(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    repl.show_history()
+
+    output = capsys.readouterr().out
+
+    assert "No calculation history." in output
+
+
+def test_show_history(capsys):
+    calculator = StubCalculator()
+    calculator.calculate("add", 5, 3)
+
+    repl = CalculatorREPL(calculator)
+    repl.show_history()
+
+    output = capsys.readouterr().out
+
+    assert "add" in output
+    assert "8" in output
+
+
+def test_empty_command(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    result = repl.handle_command("   ")
+
+    assert result is True
+    assert "Please enter a command." in capsys.readouterr().out
+
+
+def test_exit_command(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    result = repl.handle_command("exit")
+
+    assert result is False
+    assert "Goodbye!" in capsys.readouterr().out
+
+
+def test_help_command(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command("help") is True
+
+    assert "Available operations:" in capsys.readouterr().out
+
+
+def test_history_command(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command("history") is True
+
+    assert "No calculation history." in capsys.readouterr().out
+
+
+def test_clear_command(capsys):
+    calculator = StubCalculator()
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("clear") is True
+
+    assert calculator.cleared is True
+    assert "History cleared." in capsys.readouterr().out
+
+
+def test_undo_success(capsys):
+    calculator = StubCalculator()
+    calculator.undo_result = True
+
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("undo") is True
+
+    assert "Undo successful." in capsys.readouterr().out
+
+
+def test_undo_failure(capsys):
+    calculator = StubCalculator()
+    calculator.undo_result = False
+
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("undo") is True
+
+    assert "Nothing to undo." in capsys.readouterr().out
+
+
+def test_redo_success(capsys):
+    calculator = StubCalculator()
+    calculator.redo_result = True
+
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("redo") is True
+
+    assert "Redo successful." in capsys.readouterr().out
+
+
+def test_redo_failure(capsys):
+    calculator = StubCalculator()
+    calculator.redo_result = False
+
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("redo") is True
+
+    assert "Nothing to redo." in capsys.readouterr().out
+
+
+def test_save_command(capsys):
+    calculator = StubCalculator()
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("save") is True
+
+    assert calculator.saved is True
+    assert "History saved." in capsys.readouterr().out
+
+
+def test_load_command(capsys):
+    calculator = StubCalculator()
+    repl = CalculatorREPL(calculator)
+
+    assert repl.handle_command("load") is True
+
+    assert calculator.loaded is True
+    assert "History loaded." in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "command,expected",
+    [
+        ("add 5 3", 8.0),
+        ("subtract 9 4", 5.0),
+        ("multiply 6 7", 42.0),
+        ("divide 10 2", 5.0),
+        ("power 2 3", 8.0),
+        ("root 81 2", 9.0),
+    ],
+)
+def test_valid_calculations(command, expected, capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command(command) is True
+
+    output = capsys.readouterr().out
+
+    assert f"Result: {expected}" in output
+
+
+def test_invalid_operation(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command("modulus 10 3") is True
+
+    output = capsys.readouterr().out
+
+    assert "Error: Invalid operation: modulus" in output
+
+
+def test_invalid_number(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command("add hello 3") is True
+
+    output = capsys.readouterr().out
+
+    assert "Error:" in output
+    assert "hello" in output
+
+
+def test_wrong_number_of_arguments(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command("add 5") is True
+
+    output = capsys.readouterr().out
+
+    assert "Error:" in output
+
+
+def test_calculator_error(capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    assert repl.handle_command("divide 10 0") is True
+
+    output = capsys.readouterr().out
+
+    assert "Division by zero is not allowed." in output
+
+
+def test_run_until_exit(monkeypatch, capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    commands = iter(["add 2 3", "exit"])
+
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda _: next(commands),
+    )
+
+    repl.run()
+
+    output = capsys.readouterr().out
+
+    assert "Enhanced Calculator" in output
+    assert "Result: 5.0" in output
+    assert "Goodbye!" in output
+
+
+def test_run_handles_eof(monkeypatch, capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    def raise_eof(_):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+
+    repl.run()
+
+    assert "Goodbye!" in capsys.readouterr().out
+
+
+def test_run_handles_keyboard_interrupt(monkeypatch, capsys):
+    repl = CalculatorREPL(StubCalculator())
+
+    def raise_interrupt(_):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(
+        "builtins.input",
+        raise_interrupt,
+    )
+
+    repl.run()
+
+    assert "Goodbye!" in capsys.readouterr().out
