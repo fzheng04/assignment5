@@ -1,75 +1,95 @@
 import pytest
-from app.operations import Operations
+
+from app.exceptions import OperationError
+from app.operations import (
+    Addition,
+    Subtraction,
+    Multiplication,
+    Division,
+    Power,
+    Root,
+    OperationFactory,
+)
 
 
 @pytest.mark.parametrize(
-    "a, b, expected",
+    "operation_class,a,b,expected",
     [
-        (2, 3, 5),
-        (0, 0, 0),
-        (-1, 1, 0),
-        (2.5, 3.5, 6.0),
-        (-2.5, 3.5, 1.0),
-    ]
+        (Addition, 2, 3, 5),
+        (Addition, -1, 1, 0),
+        (Subtraction, 5, 3, 2),
+        (Multiplication, 4, 3, 12),
+        (Division, 10, 2, 5),
+        (Power, 2, 3, 8),
+        (Root, 16, 2, 4),
+        (Root, 27, 3, 3),
+    ],
 )
-def test_addition(a, b, expected):
-    assert Operations.addition(a, b) == expected
-
-
-@pytest.mark.parametrize(
-    "a, b, expected",
-    [
-        (5, 3, 2),
-        (0, 0, 0),
-        (-5, -3, -2),
-        (10.5, 5.5, 5.0),
-        (-10.5, -5.5, -5.0),
-    ]
-)
-def test_subtraction(a, b, expected):
-    assert Operations.subtraction(a, b) == expected
-
-
-@pytest.mark.parametrize(
-    "a, b, expected",
-    [
-        (2, 3, 6),
-        (0, 10, 0),
-        (-2, -3, 6),
-        (2.5, 4, 10.0),
-        (-2.5, 4, -10.0),
-    ]
-)
-def test_multiplication(a, b, expected):
-    assert Operations.multiplication(a, b) == expected
-
-
-@pytest.mark.parametrize(
-    "a, b, expected",
-    [
-        (10, 2, 5),
-        (9, 3, 3),
-        (-10, 2, -5),
-        (7.5, 2.5, 3.0),
-    ]
-)
-def test_division(a, b, expected):
-    assert Operations.division(a, b) == expected
+def test_operations(operation_class, a, b, expected):
+    operation = operation_class()
+    assert operation.execute(a, b) == pytest.approx(expected)
 
 
 def test_division_by_zero():
-    with pytest.raises(ValueError, match="Division by zero is not allowed."):
-        Operations.division(10, 0)
+    operation = Division()
+
+    with pytest.raises(
+        OperationError,
+        match="Division by zero is not allowed."
+    ):
+        operation.execute(10, 0)
+
+
+def test_root_degree_zero():
+    operation = Root()
+
+    with pytest.raises(
+        OperationError,
+        match="Root degree cannot be zero."
+    ):
+        operation.execute(16, 0)
+
+
+def test_even_root_of_negative_number():
+    operation = Root()
+
+    with pytest.raises(
+        OperationError,
+        match="Even root of a negative number is not allowed."
+    ):
+        operation.execute(-16, 2)
+
+
+def test_negative_odd_root():
+    operation = Root()
+
+    assert operation.execute(-27, 3) == pytest.approx(-3)
+
 
 @pytest.mark.parametrize(
-    "a, b, expected",
+    "name,expected_class",
     [
-        (2, 3, 8),
-        (5, 2, 25),
-        (10, 0, 1),
-        (4, 0.5, 2),
-        (-2, 3, -8),
-    ]
+        ("add", Addition),
+        ("subtract", Subtraction),
+        ("multiply", Multiplication),
+        ("divide", Division),
+        ("power", Power),
+        ("root", Root),
+    ],
 )
-def test_power(a, b, expected):
-    assert Operations.power(a, b) == expected
+def test_operation_factory(name, expected_class):
+    operation = OperationFactory.create_operation(name)
+    assert isinstance(operation, expected_class)
+
+
+def test_factory_is_case_insensitive():
+    operation = OperationFactory.create_operation("ADD")
+    assert isinstance(operation, Addition)
+
+
+def test_invalid_operation():
+    with pytest.raises(
+        OperationError,
+        match="Invalid operation: modulus"
+    ):
+        OperationFactory.create_operation("modulus")
