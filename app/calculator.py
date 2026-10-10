@@ -15,7 +15,8 @@ class CalculatorObserver(ABC):
 
     @abstractmethod
     def update(self, calculator, calculation) -> None:
-        calculator._autosave_if_enabled()
+        """Receive calculation notifications."""
+        pass  # pragma: no cover
 
 class LoggingObserver(CalculatorObserver):
     """Log completed calculations."""
@@ -109,6 +110,7 @@ class Calculator:
 
         self.mementos.save_state(previous_history)
 
+    
     def undo(self) -> bool:
         """Restore the previous calculator state."""
         previous_state = self.mementos.undo(self.history.data)
@@ -117,8 +119,12 @@ class Calculator:
             return False
 
         self.history.replace(previous_state)
+        self._autosave_if_enabled()
+
         return True
 
+
+    
     def redo(self) -> bool:
         """Restore a previously undone calculator state."""
         next_state = self.mementos.redo(self.history.data)
@@ -127,7 +133,10 @@ class Calculator:
             return False
 
         self.history.replace(next_state)
+        self._autosave_if_enabled()
+
         return True
+
 
     def _limit_history(self) -> None:
         """Keep history within the configured maximum size."""
@@ -136,3 +145,10 @@ class Calculator:
                 self.config.max_history
             )
             self.history.replace(limited_history)
+
+
+
+    def _autosave_if_enabled(self) -> None:
+        """Persist history when auto-save is enabled."""
+        if self.config.auto_save:
+            self.save_history()
