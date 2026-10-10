@@ -15,8 +15,7 @@ class CalculatorObserver(ABC):
 
     @abstractmethod
     def update(self, calculator, calculation) -> None:
-        """React to a completed calculation."""
-
+        calculator._autosave_if_enabled()
 
 class LoggingObserver(CalculatorObserver):
     """Log completed calculations."""

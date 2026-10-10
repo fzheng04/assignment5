@@ -3,7 +3,7 @@ import logging
 import pandas as pd
 
 from app.calculator import Calculator
-
+import pytest
 
 class DummyConfig:
     """Simple configuration object for calculator tests."""
@@ -285,3 +285,26 @@ def test_clear_history_autosaves(tmp_path):
     restarted = make_calculator(tmp_path, auto_save=True)
 
     assert restarted.get_history().empty
+
+
+@pytest.mark.parametrize(
+    ("action", "expected_rows"),
+    [
+        ("undo", 0),
+        ("redo", 1),
+    ],
+)
+def test_undo_redo_autosaves(tmp_path, action, expected_rows):
+    calculator = make_calculator(tmp_path, auto_save=True)
+    calculator.calculate("add", 5, 3)
+
+    if action == "redo":
+        assert calculator.undo() is True
+        # Save the starting state so redo is tested independently.
+        calculator.save_history()
+
+    assert getattr(calculator, action)() is True
+
+    restarted = make_calculator(tmp_path, auto_save=True)
+
+    assert len(restarted.get_history()) == expected_rows
