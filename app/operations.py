@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-
+from app.exceptions import OperationError
 
 class Operation(ABC):
     """Base class for calculator operations."""
@@ -27,7 +27,7 @@ class Multiplication(Operation):
 class Division(Operation):
     def execute(self, a: float, b: float) -> float:
         if b == 0:
-            raise ValueError("Division by zero is not allowed.")
+            raise OperationError("Division by zero is not allowed.")
         return a / b
 
 
@@ -39,10 +39,12 @@ class Power(Operation):
 class Root(Operation):
     def execute(self, a: float, b: float) -> float:
         if b == 0:
-            raise ValueError("Root degree cannot be zero.")
+            raise OperationError("Root degree cannot be zero.")
 
         if a < 0 and int(b) % 2 == 0:
-            raise ValueError("Even root of a negative number is not allowed.")
+            raise OperationError(
+    "Even root of a negative number is not allowed."
+    )
 
         if a < 0:
             return -((-a) ** (1 / b))
@@ -67,6 +69,6 @@ class OperationFactory:
         operation_class = cls._operations.get(operation_name.lower())
 
         if operation_class is None:
-            raise ValueError(f"Invalid operation: {operation_name}")
+            raise OperationError(f"Invalid operation: {operation_name}")
 
         return operation_class()
