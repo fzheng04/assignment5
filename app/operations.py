@@ -6,7 +6,7 @@ class Operation(ABC):
 
     @abstractmethod
     def execute(self, a: float, b: float) -> float:
-        pass
+        pass  # pragma: no cover
 
 
 class Addition(Operation):

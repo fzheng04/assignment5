@@ -331,3 +331,21 @@ def test_run_handles_keyboard_interrupt(monkeypatch, capsys):
     repl.run()
 
     assert "Goodbye!" in capsys.readouterr().out
+
+
+def test_main(monkeypatch):
+    called = {"run": False}
+
+    def fake_run(self):
+        called["run"] = True
+
+    monkeypatch.setattr(
+        "app.calculator_repl.CalculatorREPL.run",
+        fake_run,
+    )
+
+    from app.calculator_repl import main
+
+    main()
+
+    assert called["run"] is True
