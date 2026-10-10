@@ -10,7 +10,7 @@ __pycache__/
 
 # Virtual environment folder
 venv/
-
+.env
 # Distribution / packaging
 .Python
 build/
@@ -85,3 +85,6 @@ docs/_build/
 *.idea/
 *.sublime-project
 *.sublime-workspace
+# Calculator generated data
+data/
+history.csv
