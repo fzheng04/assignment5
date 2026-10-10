@@ -93,6 +93,9 @@ class Calculator:
         self.mementos.save_state(self.history.data)
         self.history.clear()
 
+        # Automatically save the cleared history if enabled.
+        if self.config.auto_save:
+            self.save_history()
     def save_history(self, file_path=None) -> None:
         """Save history to CSV."""
         path = file_path or self.config.history_file

@@ -273,3 +273,15 @@ def test_logging_observer(tmp_path, caplog):
         calculator.calculate("add", 2, 3)
 
     assert "add 2 3 = 5" in caplog.text
+
+
+def test_clear_history_autosaves(tmp_path):
+    calculator = make_calculator(tmp_path, auto_save=True)
+
+    calculator.calculate("add", 5, 3)
+    calculator.clear_history()
+
+    # Restart the calculator and reload its saved history
+    restarted = make_calculator(tmp_path, auto_save=True)
+
+    assert restarted.get_history().empty
