@@ -1,152 +1,275 @@
-""" tests/test_calculator.py """
-import sys
-from io import StringIO
-from app.calculator import calculator, Calculator
+import logging
+
+import pandas as pd
+
+from app.calculator import Calculator
 
 
-# Helper function to capture print statements
-def run_calculator_with_input(monkeypatch, inputs):
-    """
-    Simulates user input and captures output from the calculator REPL.
-    
-    :param monkeypatch: pytest fixture to simulate user input
-    :param inputs: list of inputs to simulate
-    :return: captured output as a string
-    """
-    input_iterator = iter(inputs)
-    monkeypatch.setattr('builtins.input', lambda _: next(input_iterator))
+class DummyConfig:
+    """Simple configuration object for calculator tests."""
 
-    # Capture the output of the calculator
-    captured_output = StringIO()
-    sys.stdout = captured_output
-    calculator()
-    sys.stdout = sys.__stdout__  # Reset stdout
-    return captured_output.getvalue()
+    def __init__(
+        self,
+        history_file,
+        max_history=100,
+        auto_save=False,
+    ):
+        self.history_file = str(history_file)
+        self.max_history = max_history
+        self.auto_save = auto_save
 
 
-# Positive Tests
-def test_addition(monkeypatch):
-    """Test addition operation in REPL."""
-    inputs = ["add 2 3", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Result: 5.0" in output
+class RecordingObserver:
+    """Observer used to verify notifications during tests."""
+
+    def __init__(self):
+        self.calculations = []
+
+    def update(self, calculator, calculation):
+        self.calculations.append(calculation)
 
 
-def test_subtraction(monkeypatch):
-    """Test subtraction operation in REPL."""
-    inputs = ["subtract 5 2", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Result: 3.0" in output
-
-
-def test_multiplication(monkeypatch):
-    """Test multiplication operation in REPL."""
-    inputs = ["multiply 4 5", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Result: 20.0" in output
-
-
-def test_division(monkeypatch):
-    """Test division operation in REPL."""
-    inputs = ["divide 10 2", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Result: 5.0" in output
-
-
-# Negative Tests
-def test_invalid_operation(monkeypatch):
-    """Test invalid operation in REPL."""
-    inputs = ["modulus 5 3", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Unknown operation" in output
-
-
-def test_invalid_input_format(monkeypatch):
-    """Test invalid input format in REPL."""
-    inputs = ["add two three", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Invalid input. Please follow the format" in output
-
-
-def test_division_by_zero(monkeypatch):
-    """Test division by zero in REPL."""
-    inputs = ["divide 5 0", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-    assert "Division by zero is not allowed" in output
-
-
-
-def test_calculator_uses_factory():
-    Calculator.clear_history()
-
-    result = Calculator.calculate("add", 2, 3)
-
-    assert result == 5
-
-
-def test_calculator_history():
-    Calculator.clear_history()
-
-    Calculator.calculate("add", 2, 3)
-    Calculator.calculate("power", 2, 4)
-
-    history = Calculator.get_history()
-
-    assert len(history) == 2
-    assert history[0]["result"] == 5
-    assert history[1]["operation"] == "power"
-    assert history[1]["result"] == 16
-
-
-def test_clear_history():
-    Calculator.clear_history()
-
-    Calculator.calculate("multiply", 3, 4)
-
-    assert len(Calculator.get_history()) == 1
-
-    Calculator.clear_history()
-
-    assert Calculator.get_history() == []
-
-
-def test_power(monkeypatch):
-    """Test power operation in REPL."""
-    inputs = ["power 2 3", "exit"]
-    output = run_calculator_with_input(monkeypatch, inputs)
-
-    assert "Result: 8.0" in output
-
-
-def test_help_command(monkeypatch):
-    output = run_calculator_with_input(monkeypatch, ["help", "exit"])
-
-    assert "Available operations" in output
-    assert "Special commands" in output
-
-
-def test_empty_history(monkeypatch):
-    Calculator.clear_history()
-
-    output = run_calculator_with_input(monkeypatch, ["history", "exit"])
-
-    assert "No calculations in history." in output
-
-
-def test_history_with_calculation(monkeypatch):
-    Calculator.clear_history()
-    Calculator.calculate("add", 2, 3)
-
-    output = run_calculator_with_input(monkeypatch, ["history", "exit"])
-
-    assert "add" in output
-    assert "5" in output
-
-
-def test_invalid_input(monkeypatch):
-    output = run_calculator_with_input(
-        monkeypatch,
-        ["this is invalid input", "exit"],
+def make_calculator(
+    tmp_path,
+    max_history=100,
+    auto_save=False,
+):
+    config = DummyConfig(
+        tmp_path / "history.csv",
+        max_history=max_history,
+        auto_save=auto_save,
     )
 
-    assert "Invalid input" in output
+    return Calculator(config)
+
+
+def test_calculate_returns_result_and_adds_history(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    result = calculator.calculate("add", 5, 3)
+
+    assert result == 8
+    assert len(calculator.get_history()) == 1
+    assert calculator.get_history().iloc[0]["operation"] == "add"
+    assert calculator.get_history().iloc[0]["result"] == 8
+
+
+def test_calculator_loads_existing_history(tmp_path):
+    history_file = tmp_path / "history.csv"
+
+    existing = pd.DataFrame(
+        [
+            {
+                "operation": "multiply",
+                "a": 4,
+                "b": 5,
+                "result": 20,
+            }
+        ]
+    )
+
+    existing.to_csv(history_file, index=False)
+
+    config = DummyConfig(history_file)
+    calculator = Calculator(config)
+
+    assert len(calculator.get_history()) == 1
+    assert calculator.get_history().iloc[0]["result"] == 20
+
+
+def test_clear_history(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    calculator.calculate("add", 1, 2)
+    calculator.clear_history()
+
+    assert calculator.get_history().empty
+
+
+def test_clear_empty_history(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    calculator.clear_history()
+
+    assert calculator.get_history().empty
+
+
+def test_undo_and_redo(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    calculator.calculate("add", 5, 3)
+
+    assert calculator.undo() is True
+    assert calculator.get_history().empty
+
+    assert calculator.redo() is True
+    assert len(calculator.get_history()) == 1
+    assert calculator.get_history().iloc[0]["result"] == 8
+
+
+def test_undo_when_nothing_to_undo(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    assert calculator.undo() is False
+
+
+def test_redo_when_nothing_to_redo(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    assert calculator.redo() is False
+
+
+def test_clear_can_be_undone(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    calculator.calculate("multiply", 6, 7)
+    calculator.clear_history()
+
+    assert calculator.get_history().empty
+
+    calculator.undo()
+
+    assert len(calculator.get_history()) == 1
+    assert calculator.get_history().iloc[0]["result"] == 42
+
+
+def test_save_history(tmp_path):
+    calculator = make_calculator(tmp_path)
+    custom_file = tmp_path / "saved.csv"
+
+    calculator.calculate("subtract", 10, 3)
+    calculator.save_history(str(custom_file))
+
+    assert custom_file.exists()
+
+
+def test_save_history_uses_config_path(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    calculator.calculate("add", 2, 2)
+    calculator.save_history()
+
+    assert (tmp_path / "history.csv").exists()
+
+
+def test_load_history(tmp_path):
+    calculator = make_calculator(tmp_path)
+
+    load_file = tmp_path / "load.csv"
+
+    pd.DataFrame(
+        [
+            {
+                "operation": "power",
+                "a": 2,
+                "b": 3,
+                "result": 8,
+            }
+        ]
+    ).to_csv(load_file, index=False)
+
+    calculator.load_history(str(load_file))
+
+    assert len(calculator.get_history()) == 1
+    assert calculator.get_history().iloc[0]["operation"] == "power"
+
+
+def test_load_history_uses_config_path(tmp_path):
+    history_file = tmp_path / "history.csv"
+
+    pd.DataFrame(
+        [
+            {
+                "operation": "root",
+                "a": 16,
+                "b": 2,
+                "result": 4,
+            }
+        ]
+    ).to_csv(history_file, index=False)
+
+    config = DummyConfig(history_file)
+    calculator = Calculator(config)
+
+    calculator.clear_history()
+    calculator.load_history()
+
+    assert len(calculator.get_history()) == 1
+    assert calculator.get_history().iloc[0]["result"] == 4
+
+
+def test_history_limit(tmp_path):
+    calculator = make_calculator(
+        tmp_path,
+        max_history=2,
+    )
+
+    calculator.calculate("add", 1, 1)
+    calculator.calculate("add", 2, 2)
+    calculator.calculate("add", 3, 3)
+
+    history = calculator.get_history()
+
+    assert len(history) == 2
+    assert history.iloc[0]["result"] == 4
+    assert history.iloc[1]["result"] == 6
+
+
+def test_add_and_remove_observer(tmp_path):
+    calculator = make_calculator(tmp_path)
+    observer = RecordingObserver()
+
+    calculator.add_observer(observer)
+    calculator.calculate("add", 5, 5)
+
+    assert len(observer.calculations) == 1
+    assert observer.calculations[0].result == 10
+
+    calculator.remove_observer(observer)
+    calculator.calculate("add", 2, 2)
+
+    assert len(observer.calculations) == 1
+
+
+def test_remove_unregistered_observer(tmp_path):
+    calculator = make_calculator(tmp_path)
+    observer = RecordingObserver()
+
+    calculator.remove_observer(observer)
+
+    assert observer not in calculator._observers
+
+
+def test_auto_save_enabled(tmp_path):
+    calculator = make_calculator(
+        tmp_path,
+        auto_save=True,
+    )
+
+    calculator.calculate("multiply", 4, 5)
+
+    history_file = tmp_path / "history.csv"
+
+    assert history_file.exists()
+
+
+def test_auto_save_disabled(tmp_path):
+    calculator = make_calculator(
+        tmp_path,
+        auto_save=False,
+    )
+
+    calculator.calculate("multiply", 4, 5)
+
+    history_file = tmp_path / "history.csv"
+
+    assert not history_file.exists()
+
+
+def test_logging_observer(tmp_path, caplog):
+    calculator = make_calculator(tmp_path)
+
+    with caplog.at_level(logging.INFO):
+        calculator.calculate("add", 2, 3)
+
+    assert "add 2 3 = 5" in caplog.text
