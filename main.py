@@ -3,7 +3,7 @@
 # and now we are telling the computer, "Go and find that calculator tool for us."
 # The "app" part is like a folder, and inside that folder, there's another file called "calculator.py",
 # which has the tool (function) called "calculator" that we need.
-from app.calculator import calculator
+from app.calculator_repl import main
 
 # This part of the code is super important! It checks if this file is being run directly by the computer.
 # Let me explain: when we write Python programs, sometimes we want to run them directly,
@@ -16,4 +16,4 @@ from app.calculator import calculator
 if __name__ == "__main__":
     # Now, we use the calculator tool we got earlier. This will start the calculator, which is a program 
     # that keeps running and doing math based on what we tell it.
-    calculator()
+    main()
