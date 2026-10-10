@@ -1,70 +1,52 @@
 import pytest
+
 from app.calculation import Calculation
-from app.calculation import CalculationFactory
-from app.calculation import (
-    AddCalculation,
-    SubtractCalculation,
-    MultiplyCalculation,
-    DivideCalculation,
-    PowerCalculation,
-)
-def test_calculation_is_abstract():
-    with pytest.raises(TypeError):
-        Calculation(1, 2)
+from app.exceptions import OperationError
 
-
-def test_calculation_attributes_and_execute():
-    class TestCalculation(Calculation):
-        def execute(self):
-            return super().execute()
-
-    calculation = TestCalculation(5, 3)
-
-    assert calculation.a == 5
-    assert calculation.b == 3
-    assert calculation.execute() is None
-
-
-def test_register_calculation():
-    @CalculationFactory.register_calculation("test")
-    class TestCalculation(Calculation):
-        def execute(self):
-            return self.a + self.b
-
-    calculation = CalculationFactory.create("test", 2, 3)
-
-    assert isinstance(calculation, TestCalculation)
-    assert calculation.execute() == 5
-
-
-def test_factory_invalid_operation():
-    with pytest.raises(ValueError, match="Unknown operation"):
-        CalculationFactory.create("invalid", 1, 2)
 
 @pytest.mark.parametrize(
-    "operation,a,b,expected_class,expected_result",
+    "operation,a,b,expected",
     [
-        ("add", 2, 3, AddCalculation, 5),
-        ("subtract", 5, 3, SubtractCalculation, 2),
-        ("multiply", 4, 3, MultiplyCalculation, 12),
-        ("divide", 8, 2, DivideCalculation, 4),
-        ("power", 2, 3, PowerCalculation, 8),
+        ("add", 5, 3, 8),
+        ("subtract", 9, 4, 5),
+        ("multiply", 6, 7, 42),
+        ("divide", 12, 3, 4),
+        ("power", 2, 4, 16),
+        ("root", 81, 2, 9),
     ],
 )
-def test_factory_real_calculations(
-    operation,
-    a,
-    b,
-    expected_class,
-    expected_result,
-):
-    calculation = CalculationFactory.create(operation, a, b)
+def test_calculation_execute(operation, a, b, expected):
+    calculation = Calculation(operation, a, b)
 
-    assert isinstance(calculation, expected_class)
-    assert calculation.execute() == expected_result
+    result = calculation.execute()
 
-def test_divide_calculation_by_zero():
-    calculation = CalculationFactory.create("divide", 5, 0)
+    assert result == pytest.approx(expected)
+    assert calculation.result == pytest.approx(expected)
 
-    with pytest.raises(ValueError, match="Division by zero"):
+
+def test_calculation_to_dict():
+    calculation = Calculation("add", 2, 3)
+    calculation.execute()
+
+    assert calculation.to_dict() == {
+        "operation": "add",
+        "a": 2,
+        "b": 3,
+        "result": 5,
+    }
+
+
+def test_calculation_result_starts_as_none():
+    calculation = Calculation("add", 1, 2)
+
+    assert calculation.result is None
+
+
+def test_invalid_calculation_operation():
+    calculation = Calculation("modulus", 10, 3)
+
+    with pytest.raises(
+        OperationError,
+        match="Invalid operation: modulus",
+    ):
         calculation.execute()
