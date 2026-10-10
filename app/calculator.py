@@ -1,7 +1,42 @@
+import logging
+from abc import ABC, abstractmethod
+
 from app.calculation import Calculation
 from app.calculator_config import CalculatorConfig
 from app.calculator_memento import MementoManager
 from app.history import HistoryManager
+
+
+logger = logging.getLogger(__name__)
+
+
+class CalculatorObserver(ABC):
+    """Base class for calculator observers."""
+
+    @abstractmethod
+    def update(self, calculator, calculation) -> None:
+        """React to a completed calculation."""
+
+
+class LoggingObserver(CalculatorObserver):
+    """Log completed calculations."""
+
+    def update(self, calculator, calculation) -> None:
+        logger.info(
+            "%s %s %s = %s",
+            calculation.operation,
+            calculation.a,
+            calculation.b,
+            calculation.result,
+        )
+
+
+class AutoSaveObserver(CalculatorObserver):
+    """Automatically save history after calculations."""
+
+    def update(self, calculator, calculation) -> None:
+        if calculator.config.auto_save:
+            calculator.save_history()
 
 
 class Calculator:
@@ -12,19 +47,37 @@ class Calculator:
         self.history = HistoryManager()
         self.mementos = MementoManager()
 
-        # Load existing calculation history when the calculator starts.
+        self._observers = []
+        self.add_observer(LoggingObserver())
+        self.add_observer(AutoSaveObserver())
+
         self.history.load(self.config.history_file)
+
+    def add_observer(self, observer: CalculatorObserver) -> None:
+        """Register an observer."""
+        self._observers.append(observer)
+
+    def remove_observer(self, observer: CalculatorObserver) -> None:
+        """Remove a registered observer."""
+        if observer in self._observers:
+            self._observers.remove(observer)
+
+    def _notify_observers(self, calculation: Calculation) -> None:
+        """Notify observers that a calculation was completed."""
+        for observer in self._observers:
+            observer.update(self, calculation)
 
     def calculate(self, operation: str, a: float, b: float) -> float:
         """Perform a calculation and add it to history."""
         calculation = Calculation(operation, a, b)
         result = calculation.execute()
 
-        # Only save an undo state after a successful calculation.
         self.mementos.save_state(self.history.data)
 
         self.history.add(calculation)
         self._limit_history()
+
+        self._notify_observers(calculation)
 
         return result
 
